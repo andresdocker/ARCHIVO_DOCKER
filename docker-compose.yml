@@ -1,4 +1,4 @@
-version: '3.5'
+version: '3.8'
 
 services:
   # -------------------------
@@ -6,43 +6,73 @@ services:
   # -------------------------
   nginx:
     image: nginx:latest
+    container_name: dockerandres-nginx
     restart: always
     ports:
       - "80:80"
-      - "443:443"
     volumes:
-      - ./nginx.conf:/etc/nginx/nginx.conf
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro # Archivo generado dinámicamente
       - ./index.html:/usr/share/nginx/html/index.html
-    networks:
-      - zabbix-net
+      - ./img:/usr/share/nginx/html/img
     depends_on:
       - jenkins
       - portainer
       - web-nginx-pgsql
+      - owncloud
+    networks:
+      - zabbix-net
+    environment:
+      HOST_IP: "${HOST_IP}" # Variable dinámica tomada del archivo .env
+    command: nginx -g 'daemon off;'
 
   # -------------------------
-  # OwnCloud (Almacenamiento Personal en la Nube)
+  # Jenkins
+  # -------------------------
+  jenkins:
+    image: jenkins/jenkins:lts
+    container_name: dockerandres-jenkins
+    restart: always
+    ports:
+      - "8080:8080"
+      - "50000:50000"
+    networks:
+      - zabbix-net
+    environment:
+      JAVA_OPTS: "-Djenkins.install.runSetupWizard=false"
+      HOST_IP: "${HOST_IP}" # Pasar la IP dinámica como variable
+
+  # -------------------------
+  # OwnCloud (con inicialización automática)
   # -------------------------
   owncloud:
     image: owncloud/server:latest
+    container_name: dockerandres-owncloud
     ports:
       - "8081:8080"
-    volumes:
-      - owncloud-data:/mnt/data
     networks:
       - zabbix-net
+    volumes:
+      - owncloud_data:/mnt/data # Volumen persistente para datos
+    entrypoint: >
+      sh -c "
+      if [ ! -f /mnt/data/config/config.php ]; then
+        echo 'Inicializando configuración de OwnCloud...';
+        mkdir -p /mnt/data/config;
+        cp /var/www/html/config/config.sample.php /mnt/data/config/config.php;
+        sed -i \"s|'trusted_domains' => \[\]|'trusted_domains' => ['${HOST_IP}']|g\" /mnt/data/config/config.php;
+      fi;
+      exec /usr/bin/entrypoint.sh owncloud"
 
   # -------------------------
   # PostgreSQL (Base de datos para Zabbix)
   # -------------------------
   postgres-server:
     image: postgres:13-alpine
-    volumes:
-      - postgres-data:/var/lib/postgresql/data
+    container_name: dockerandres-postgres-server
     environment:
-      - POSTGRES_PASSWORD=zabbix
-      - POSTGRES_USER=zabbix
-      - POSTGRES_DB=zabbix
+      POSTGRES_PASSWORD: zabbix
+      POSTGRES_USER: zabbix
+      POSTGRES_DB: zabbix
     healthcheck:
       test: ["CMD-SHELL", "pg_isready"]
       interval: 10s
@@ -56,13 +86,14 @@ services:
   # -------------------------
   server:
     image: zabbix/zabbix-server-pgsql
+    container_name: dockerandres-server
     depends_on:
       - postgres-server
     environment:
-      - POSTGRES_PASSWORD=zabbix
-      - POSTGRES_USER=zabbix
-      - POSTGRES_DB=zabbix
-      - DB_SERVER_HOST=postgres-server
+      DB_SERVER_HOST: postgres-server
+      POSTGRES_PASSWORD: zabbix
+      POSTGRES_USER: zabbix
+      POSTGRES_DB: zabbix
     ports:
       - "10051:10051"
     networks:
@@ -73,32 +104,18 @@ services:
   # -------------------------
   web-nginx-pgsql:
     image: zabbix/zabbix-web-nginx-pgsql
+    container_name: dockerandres-web-nginx-pgsql
     depends_on:
       - server
       - postgres-server
     environment:
-      - DB_SERVER_HOST=postgres-server
-      - POSTGRES_PASSWORD=zabbix
-      - POSTGRES_USER=zabbix
-      - POSTGRES_DB=zabbix
-      - ZBX_SERVER_HOST=server
+      DB_SERVER_HOST: postgres-server
+      POSTGRES_PASSWORD: zabbix
+      POSTGRES_USER: zabbix
+      POSTGRES_DB: zabbix
+      ZBX_SERVER_HOST: server
     ports:
       - "8084:8080"
-    networks:
-      - zabbix-net
-
-  # -------------------------
-  # Jenkins
-  # -------------------------
-  jenkins:
-    build: .
-    restart: always
-    ports:
-      - "8080:8080"
-      - "50000:50000"
-    volumes:
-      - jenkins-data:/var/jenkins_home
-      - /var/run/docker.sock:/var/run/docker.sock
     networks:
       - zabbix-net
 
@@ -107,21 +124,19 @@ services:
   # -------------------------
   portainer:
     image: portainer/portainer-ce:latest
+    container_name: dockerandres-portainer
     restart: always
     ports:
       - "9000:9000"
       - "9443:9443"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - portainer-data:/data
     networks:
       - zabbix-net
 
-volumes:
-  postgres-data:
-  jenkins-data:
-  portainer-data:
-  owncloud-data:
-
 networks:
   zabbix-net:
+
+volumes:
+  owncloud_data:
+

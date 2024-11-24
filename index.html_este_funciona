@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Panel de Servicios</title>
+</head>
+<body>
+    <h1>Panel de Servicios</h1>
+    <div>
+        <h2>Jenkins</h2>
+        <a href="/jenkins/">Ir a Jenkins</a>
+    </div>
+    <div>
+        <h2>Portainer</h2>
+        <a href="/portainer/">Ir a Portainer</a>
+    </div>
+    <div>
+        <h2>Zabbix</h2>
+        <a href="/zabbix/">Ir a Zabbix</a>
+    </div>
+    <div>
+        <h2>OwnCloud</h2>
+        <a href="/owncloud/">Ir a OwnCloud</a>
+    </div>
+</body>
+</html>
+
